@@ -1,6 +1,6 @@
 /**
- * ✨ 泡泡拍照濾鏡 — 升級整合版
- * 功能：彩色粒子混合、多種濾鏡模式切換、倒數計時拍照、閃光效果
+ * ✨ 泡泡拍照濾鏡 — 升級整合版 v2
+ * 功能：彩色粒子混合、多種濾鏡模式切換、倒數計時拍照、閃光效果、螢幕補光燈
  */
 
 let capture;
@@ -13,22 +13,27 @@ let countdown = 0;
 let countdownTimer = null;
 let flashAlpha = 0;
 
-// 濾鏡模式設定
+// ── 螢幕補光燈 ──────────────────────────────
+let torchOn = false;
+let torchStrength = 60; // 0–100，預設中等亮度
+
+// ── 濾鏡模式 ────────────────────────────────
 const MODES = [
-  { name: '🫧 夢幻泡泡', types: ['bubble'], bg: null },
-  { name: '⭐ 星空閃爍', types: ['star', 'sparkle'], bg: null },
-  { name: '🌸 花瓣飄落', types: ['petal', 'heart'], bg: null },
-  { name: '❄️ 冬日雪花', types: ['snow', 'bubble'], bg: null },
-  { name: '💛 彩虹混合', types: ['bubble', 'star', 'heart', 'petal'], bg: null },
+  { name: '🫧 夢幻泡泡',  types: ['bubble'] },
+  { name: '⭐ 星空閃爍',  types: ['star', 'sparkle'] },
+  { name: '🌸 花瓣飄落',  types: ['petal', 'heart'] },
+  { name: '❄️ 冬日雪花',  types: ['snow', 'bubble'] },
+  { name: '💛 彩虹混合',  types: ['bubble', 'star', 'heart', 'petal'] },
 ];
 let modeIndex = 0;
 
-// UI 元素
-let btnCountdown, btnSave, btnMode;
+// ── UI 元素 ──────────────────────────────────
+let btnCountdown, btnSave, btnMode, btnTorch;
+let torchSlider, torchSliderWrap, torchValueLabel;
 let uiContainer;
 let modeLabel;
 
-// ───────────────────────────────────────────
+// ────────────────────────────────────────────
 function setup() {
   createCanvas(windowWidth, windowHeight);
   colorMode(HSB, 360, 100, 100, 100);
@@ -43,7 +48,7 @@ function setup() {
 }
 
 function draw() {
-  background(280, 30, 95); // 柔和薰衣草背景
+  background(280, 30, 95);
 
   let scaleFactor = width < height ? 0.85 : 0.6;
   let imgW = width * scaleFactor;
@@ -60,30 +65,34 @@ function draw() {
   // 更新粒子圖層
   updateParticleLayer();
 
-  // 鏡像繪製
+  // ── 鏡像繪製 ──
   push();
   translate(width, 0);
   scale(-1, 1);
-
-  // 攝影機影像
   image(capture, xOffset, yOffset, imgW, imgH);
-
-  // 粒子疊加層
   image(pg, xOffset, yOffset, imgW, imgH);
-
-  // 白色裝飾框
   stroke(0, 0, 100, 60);
   strokeWeight(max(2, width * 0.003));
   noFill();
   rect(xOffset, yOffset, imgW, imgH, 8);
   pop();
 
-  // 倒數顯示
+  // ── 螢幕補光燈疊層（只蓋鏡頭影像區域，補光時粒子仍可見） ──
+  if (torchOn) {
+    colorMode(RGB, 255);
+    let tAlpha = map(torchStrength, 0, 100, 0, 210);
+    fill(255, 255, 255, tAlpha);
+    noStroke();
+    rect(xOffset, yOffset, imgW, imgH, 8);
+    colorMode(HSB, 360, 100, 100, 100);
+  }
+
+  // ── 倒數顯示 ──
   if (countdown > 0) {
     drawCountdown(xOffset, yOffset, imgW, imgH);
   }
 
-  // 閃光效果
+  // ── 拍照閃光（全螢幕） ──
   if (flashAlpha > 0) {
     colorMode(RGB, 255);
     fill(255, 255, 255, flashAlpha);
@@ -93,7 +102,7 @@ function draw() {
     flashAlpha = max(0, flashAlpha - 18);
   }
 
-  // 拍照預覽圖
+  // ── 預覽圖 ──
   if (snapshot) {
     drawPreview(snapshot);
   }
@@ -101,7 +110,7 @@ function draw() {
   updateUIStyle();
 }
 
-// ───────────────────────────────────────────
+// ────────────────────────────────────────────
 // 粒子圖層
 function updateParticleLayer() {
   if (capture.loadedmetadata) {
@@ -114,7 +123,6 @@ function updateParticleLayer() {
   pg.clear();
 
   let mode = MODES[modeIndex];
-  // 控制產生頻率
   if (random(1) < 0.15) {
     let t = random(mode.types);
     particles.push(new Particle(pg.width, pg.height, t));
@@ -123,20 +131,17 @@ function updateParticleLayer() {
   for (let i = particles.length - 1; i >= 0; i--) {
     particles[i].move();
     particles[i].display(pg);
-    if (particles[i].isOffScreen()) {
-      particles.splice(i, 1);
-    }
+    if (particles[i].isOffScreen()) particles.splice(i, 1);
   }
 }
 
-// ───────────────────────────────────────────
+// ────────────────────────────────────────────
 // 倒數顯示
 function drawCountdown(x, y, w, h) {
   let cx = x + w / 2;
   let cy = y + h / 2;
-
-  // 脈動光環
   let pulse = sin(frameCount * 0.15) * 15;
+
   colorMode(RGB, 255);
   noFill();
   stroke(180, 100, 255, 120);
@@ -146,7 +151,6 @@ function drawCountdown(x, y, w, h) {
   strokeWeight(8);
   ellipse(cx, cy, 150 + pulse, 150 + pulse);
 
-  // 數字
   fill(255, 255, 255, 230);
   noStroke();
   textAlign(CENTER, CENTER);
@@ -156,8 +160,8 @@ function drawCountdown(x, y, w, h) {
   colorMode(HSB, 360, 100, 100, 100);
 }
 
-// ───────────────────────────────────────────
-// 拍照功能
+// ────────────────────────────────────────────
+// 拍照
 function startCountdownShot() {
   if (countdownTimer) return;
   countdown = 3;
@@ -175,9 +179,8 @@ function startCountdownShot() {
 }
 
 function doTakeSnapshot() {
-  flashAlpha = 220; // 觸發閃光
+  flashAlpha = 220;
 
-  // 稍微延遲讓閃光先繪製
   setTimeout(() => {
     let scaleFactor = width < height ? 0.85 : 0.6;
     let imgW = width * scaleFactor;
@@ -208,7 +211,18 @@ function switchMode() {
   modeLabel.html(MODES[modeIndex].name);
 }
 
-// ───────────────────────────────────────────
+// ────────────────────────────────────────────
+// 補光燈開關
+function toggleTorch() {
+  torchOn = !torchOn;
+  btnTorch.html(torchOn ? '💡 補光：開' : '🔦 補光：關');
+  btnTorch.style('background', torchOn
+    ? 'linear-gradient(135deg,#f9c74f,#f8961e)'
+    : 'linear-gradient(135deg,#555,#777)');
+  torchSliderWrap.style('display', torchOn ? 'flex' : 'none');
+}
+
+// ────────────────────────────────────────────
 // 預覽圖
 function drawPreview(img) {
   let pw = width < 600 ? width * 0.25 : 120;
@@ -224,19 +238,19 @@ function drawPreview(img) {
   colorMode(HSB, 360, 100, 100, 100);
 }
 
-// ───────────────────────────────────────────
-// UI
+// ────────────────────────────────────────────
+// UI 建立
 function setupUI() {
   uiContainer = createDiv('');
   uiContainer.style('position', 'absolute');
-  uiContainer.style('bottom', '28px');
+  uiContainer.style('bottom', '20px');
   uiContainer.style('width', '100%');
   uiContainer.style('display', 'flex');
   uiContainer.style('flex-direction', 'column');
   uiContainer.style('align-items', 'center');
-  uiContainer.style('gap', '10px');
+  uiContainer.style('gap', '8px');
 
-  // 濾鏡名稱標籤
+  // 濾鏡名稱
   modeLabel = createDiv(MODES[0].name);
   modeLabel.parent(uiContainer);
   modeLabel.style('font-size', '14px');
@@ -244,15 +258,51 @@ function setupUI() {
   modeLabel.style('font-weight', '600');
   modeLabel.style('letter-spacing', '1px');
 
+  // ── 補光燈強度滑桿（預設隱藏） ──
+  torchSliderWrap = createDiv('');
+  torchSliderWrap.parent(uiContainer);
+  torchSliderWrap.style('display', 'none');
+  torchSliderWrap.style('align-items', 'center');
+  torchSliderWrap.style('gap', '8px');
+  torchSliderWrap.style('background', 'rgba(255,255,255,0.60)');
+  torchSliderWrap.style('backdrop-filter', 'blur(6px)');
+  torchSliderWrap.style('border-radius', '30px');
+  torchSliderWrap.style('padding', '6px 16px');
+
+  let torchIcon = createSpan('☀️');
+  torchIcon.parent(torchSliderWrap);
+  torchIcon.style('font-size', '15px');
+
+  torchSlider = createSlider(10, 100, torchStrength, 1);
+  torchSlider.parent(torchSliderWrap);
+  torchSlider.style('width', '110px');
+  torchSlider.input(() => {
+    torchStrength = torchSlider.value();
+    torchValueLabel.html(torchStrength + '%');
+  });
+
+  torchValueLabel = createSpan(torchStrength + '%');
+  torchValueLabel.parent(torchSliderWrap);
+  torchValueLabel.style('font-size', '13px');
+  torchValueLabel.style('font-weight', '700');
+  torchValueLabel.style('color', '#7a5200');
+  torchValueLabel.style('min-width', '36px');
+
+  // ── 按鈕列 ──
   let btnRow = createDiv('');
   btnRow.parent(uiContainer);
   btnRow.style('display', 'flex');
-  btnRow.style('gap', '12px');
+  btnRow.style('gap', '10px');
   btnRow.style('justify-content', 'center');
+  btnRow.style('flex-wrap', 'wrap');
 
   btnMode = createButton('🎨 切換濾鏡');
   btnMode.parent(btnRow);
   btnMode.mousePressed(switchMode);
+
+  btnTorch = createButton('🔦 補光：關');
+  btnTorch.parent(btnRow);
+  btnTorch.mousePressed(toggleTorch);
 
   btnCountdown = createButton('📸 倒數拍照');
   btnCountdown.parent(btnRow);
@@ -266,11 +316,10 @@ function setupUI() {
 
 function updateUIStyle() {
   let isMobile = width < 600;
-  let fs = isMobile ? '14px' : '16px';
-  let pd = isMobile ? '9px 18px' : '12px 24px';
-  let btns = [btnMode, btnCountdown, btnSave];
+  let fs = isMobile ? '13px' : '15px';
+  let pd = isMobile ? '8px 15px' : '11px 22px';
 
-  btns.forEach(b => {
+  [btnMode, btnTorch, btnCountdown, btnSave].forEach(b => {
     b.style('padding', pd);
     b.style('font-size', fs);
     b.style('border-radius', '50px');
@@ -278,20 +327,23 @@ function updateUIStyle() {
     b.style('font-weight', 'bold');
     b.style('cursor', 'pointer');
     b.style('color', 'white');
-    b.style('box-shadow', '0 4px 18px rgba(100,60,180,0.25)');
-    b.style('transition', 'transform 0.1s');
+    b.style('box-shadow', '0 4px 18px rgba(100,60,180,0.22)');
   });
 
   btnMode.style('background', 'linear-gradient(135deg,#9b72cf,#c491d3)');
   btnCountdown.style('background', 'linear-gradient(135deg,#6a4c93,#9b72cf)');
   btnSave.style('background', 'linear-gradient(135deg,#ff595e,#ff8c66)');
+  // 補光燈按鈕顏色由 toggleTorch() 控制，這裡補上初始狀態
+  if (!torchOn) {
+    btnTorch.style('background', 'linear-gradient(135deg,#555,#777)');
+  }
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
 
-// ───────────────────────────────────────────
+// ────────────────────────────────────────────
 // 粒子類別
 class Particle {
   constructor(w, h, type) {
@@ -304,29 +356,26 @@ class Particle {
     this.type = type || 'bubble';
     this.rot = random(TWO_PI);
     this.rotSpeed = random(-0.04, 0.04);
-    this.life = 1.0;
   }
 
   move() {
     this.y -= this.speed;
     this.x += sin(frameCount * 0.05 + this.angle) * 1.3;
     this.rot += this.rotSpeed;
-    this.hue = (this.hue + 0.8) % 360; // 緩慢色輪漂移
+    this.hue = (this.hue + 0.8) % 360;
   }
 
   display(t) {
     t.push();
     t.translate(this.x, this.y);
-
     switch (this.type) {
-      case 'bubble':   this._drawBubble(t);   break;
-      case 'star':     this._drawStar(t);     break;
-      case 'sparkle':  this._drawSparkle(t);  break;
-      case 'heart':    this._drawHeart(t);    break;
-      case 'petal':    this._drawPetal(t);    break;
-      case 'snow':     this._drawSnow(t);     break;
+      case 'bubble':  this._drawBubble(t);  break;
+      case 'star':    this._drawStar(t);    break;
+      case 'sparkle': this._drawSparkle(t); break;
+      case 'heart':   this._drawHeart(t);   break;
+      case 'petal':   this._drawPetal(t);   break;
+      case 'snow':    this._drawSnow(t);    break;
     }
-
     t.pop();
   }
 
@@ -335,11 +384,9 @@ class Particle {
     t.stroke(this.hue, 60, 100, 75);
     t.strokeWeight(1.8);
     t.ellipse(0, 0, this.r * 2);
-    // 高光
     t.fill(0, 0, 100, 55);
     t.noStroke();
     t.ellipse(-this.r * 0.3, -this.r * 0.3, this.r * 0.45);
-    // 底部反光
     t.fill(this.hue, 30, 100, 25);
     t.ellipse(this.r * 0.15, this.r * 0.35, this.r * 0.6, this.r * 0.25);
   }
@@ -356,7 +403,6 @@ class Particle {
       t.vertex(cos(a) * r, sin(a) * r);
     }
     t.endShape(CLOSE);
-    // 光暈
     t.fill(this.hue, 60, 100, 30);
     t.ellipse(0, 0, this.r * 2.5, this.r * 2.5);
   }
@@ -366,11 +412,10 @@ class Particle {
     t.stroke(this.hue, 50, 100, 90);
     t.strokeWeight(1.5);
     t.noFill();
-    let arms = 4;
-    for (let i = 0; i < arms; i++) {
-      let a = (i * TWO_PI) / arms;
+    for (let i = 0; i < 4; i++) {
+      let a = (i * TWO_PI) / 4;
       t.line(0, 0, cos(a) * this.r, sin(a) * this.r);
-      t.line(0, 0, cos(a + PI / arms) * this.r * 0.5, sin(a + PI / arms) * this.r * 0.5);
+      t.line(0, 0, cos(a + PI / 4) * this.r * 0.5, sin(a + PI / 4) * this.r * 0.5);
     }
     t.fill(this.hue, 40, 100, 70);
     t.noStroke();
@@ -398,7 +443,6 @@ class Particle {
     t.stroke(this.hue, 50, 85, 50);
     t.strokeWeight(0.5);
     t.ellipse(0, -this.r * 0.5, this.r * 0.45, this.r * 0.95);
-    // 中脈
     t.stroke(this.hue, 30, 90, 60);
     t.strokeWeight(0.8);
     t.line(0, -this.r * 0.05, 0, -this.r * 0.9);
